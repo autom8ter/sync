@@ -8,44 +8,45 @@ import (
 	"sync"
 )
 
-// Handler is a first class that is executed against the inbound message in a subscription.
-// Return false to indicate that the subscription should end
+// MessageHandlerFunc is a first class that is executed against the inbound message in a subscription.
+// Return false to indicate that the subscription should end.
 type MessageHandlerFunc func(ctx context.Context, msg Message) (bool, error)
 
-// Filter is a first class function to filter out messages before they reach a subscriptions primary Handler
-// Return true to indicate that a message passes the filter
+// MessageFilterFunc is a first class function to filter out messages before they reach a subscriptions primary Handler.
+// Return true to indicate that a message passes the filter.
 type MessageFilterFunc func(ctx context.Context, msg Message) (bool, error)
 
 // Func is a first class function that is asynchronously executed.
 type Func func(ctx context.Context) error
 
-// Machine is an interface for highly asynchronous Go applications
+// Machine is an interface for highly asynchronous Go applications.
 type Machine interface {
-	// Publish synchronously publishes the Message
+	// Publish synchronously publishes the Message.
 	Publish(ctx context.Context, msg Message)
-	// Subscribe synchronously subscribes to messages on a given channel,  executing the given HandlerFunc UNTIL the context cancels OR false is returned by the HandlerFunc.
+	// Subscribe synchronously subscribes to messages on a given channel,  executing the given HandlerFunc UNTIL the context cancels OR false is returned by the HandlerFunc..
 	// Glob matching IS supported for subscribing to multiple channels at once.
 	Subscribe(ctx context.Context, channel string, handler MessageHandlerFunc, options ...SubscriptionOpt) error
 	// Go asynchronously executes the given Func
 	Go(ctx context.Context, fn Func)
-	// Current returns the number of active jobs that are running concurrently
+	// Current returns the number of active jobs that are running concurrently.
 	Current() int
-	// Wait blocks until all active async functions(Go) exit
+	// Wait blocks until all active async functions(Go) exit.
 	Wait() error
-	// Close blocks until all active routine's exit(calls Wait) then closes all active subscriptions
-	Close()
 }
 
-// SubscriptionOptions holds config options for a subscription
+const defaultMaxRoutines = 1000
+const errChanSize = 100
+
+// SubscriptionOptions holds config options for a subscription.
 type SubscriptionOptions struct {
 	filter         MessageFilterFunc
 	subscriptionID string
 }
 
-// SubscriptionOpt configures a subscription
+// SubscriptionOpt configures a subscription.
 type SubscriptionOpt func(options *SubscriptionOptions)
 
-// WithFilter is a subscription option that filters messages
+// WithFilter is a subscription option that filters messages.
 func WithFilter(filter MessageFilterFunc) SubscriptionOpt {
 	return func(options *SubscriptionOptions) {
 		options.filter = filter
@@ -53,7 +54,7 @@ func WithFilter(filter MessageFilterFunc) SubscriptionOpt {
 }
 
 // WithSubscriptionID is a subscription option that sets the subscription id - if multiple consumers have the same subscritpion id,
-// a message will be broadcasted to just one of the consumers
+// a message will be broadcasted to just one of the consumers.
 func WithSubscriptionID(id string) SubscriptionOpt {
 	return func(options *SubscriptionOptions) {
 		options.subscriptionID = id
@@ -68,12 +69,12 @@ type machine struct {
 	wg            sync.WaitGroup
 }
 
-// Options holds config options for a machine instance
+// Options holds config options for a machine instance.
 type Options struct {
 	maxRoutines int
 }
 
-// Opt configures a machine instance
+// Opt configures a machine instance.
 type Opt func(o *Options)
 
 // WithThrottledRoutines throttles the max number of active routine's spawned by the Machine.
@@ -83,31 +84,35 @@ func WithThrottledRoutines(max int) Opt {
 	}
 }
 
-// New creates a new Machine instance with the given options(if present)
-func New(opts ...Opt) Machine {
+// New creates a new Machine instance with the given options(if present).
+// If no options are provided, the default max number of routines is 1000.
+//
+// The second return value is a cleanup function that should be called to close the machine instance.
+// Cleanup function blocks until all active routine's exit, then closes all active subscriptions.
+func New(opts ...Opt) (Machine, func()) {
 	options := &Options{}
 	for _, o := range opts {
 		o(options)
 	}
 	if options.maxRoutines <= 0 {
-		options.maxRoutines = 1000
+		options.maxRoutines = defaultMaxRoutines
 	}
-	return &machine{
+	m := &machine{
 		max:           options.maxRoutines,
 		current:       make(chan struct{}, options.maxRoutines),
 		subscriptions: &sync.Map{},
-		errChan:       make(chan error, 100),
+		errChan:       make(chan error, errChanSize),
 		wg:            sync.WaitGroup{},
 	}
-}
-
-func (p *machine) Close() {
-	p.wg.Wait()
-	p.subscriptions.Range(func(key, value any) bool {
-		p.subscriptions.Delete(key)
-		return true
-	})
-	close(p.errChan)
+	closeFn := func() {
+		defer close(m.errChan)
+		m.wg.Wait()
+		m.subscriptions.Range(func(key, value any) bool {
+			m.subscriptions.Delete(key)
+			return true
+		})
+	}
+	return m, closeFn
 }
 
 func (m *machine) Current() int {

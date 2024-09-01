@@ -10,13 +10,12 @@ import (
 )
 
 func Test(t *testing.T) {
-	var (
-		m     = machine.New()
-		count = 0
-	)
+	m, closeFn := machine.New()
+	var count = 0
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	defer m.Close()
+	defer closeFn()
 	m.Go(ctx, func(ctx context.Context) error {
 		return m.Subscribe(ctx, "testing.*", func(ctx context.Context, msg machine.Message) (bool, error) {
 			t.Logf("(%s) got message: %v", msg.Channel, msg.Body)
@@ -44,10 +43,10 @@ func Test(t *testing.T) {
 
 func TestWithThrottledRoutines(t *testing.T) {
 	max := 3
-	m := machine.New(machine.WithThrottledRoutines(max))
+	m, closeFn := machine.New(machine.WithThrottledRoutines(max))
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	defer m.Close()
+	defer closeFn()
 	for i := 0; i < 100; i++ {
 		i := i
 		m.Go(ctx, func(ctx context.Context) error {
@@ -67,7 +66,8 @@ func TestWithThrottledRoutines(t *testing.T) {
 
 func Benchmark(b *testing.B) {
 	b.Run("publish", func(b *testing.B) {
-		m := machine.New()
+		m, closeFn := machine.New()
+		defer closeFn()
 		go func() {
 			m.Subscribe(context.Background(), "testing.*", func(ctx context.Context, _ machine.Message) (bool, error) {
 				return true, nil

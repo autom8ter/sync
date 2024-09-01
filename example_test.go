@@ -13,12 +13,14 @@ import (
 func ExampleNew() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	m, closeFn := machine.New()
+	defer closeFn()
+
 	var (
-		m       = machine.New()
 		results []string
 		mu      sync.RWMutex
 	)
-	defer m.Close()
 
 	m.Go(ctx, func(ctx context.Context) error {
 		return m.Subscribe(ctx, "accounting.chat_room2", func(ctx context.Context, msg machine.Message) (bool, error) {
@@ -73,10 +75,10 @@ func ExampleNew() {
 		fmt.Print(res)
 	}
 	// Output:
-	//(accounting.chat_room2) received msg: sending message to accounting
-	//(accounting.chat_room2) received msg: sending message to accounting
-	//(engineering.chat_room1) received msg: sending message to engineering
-	//(engineering.chat_room1) received msg: sending message to engineering
-	//(human_resources.chat_room6) received msg: sending message to human resources
-	//(human_resources.chat_room6) received msg: sending message to human resources
+	// (accounting.chat_room2) received msg: sending message to accounting
+	// (accounting.chat_room2) received msg: sending message to accounting
+	// (engineering.chat_room1) received msg: sending message to engineering
+	// (engineering.chat_room1) received msg: sending message to engineering
+	// (human_resources.chat_room6) received msg: sending message to human resources
+	// (human_resources.chat_room6) received msg: sending message to human resources
 }
