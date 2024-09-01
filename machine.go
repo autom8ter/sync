@@ -101,6 +101,15 @@ func New(opts ...Opt) Machine {
 	}
 }
 
+func (p *machine) Close() {
+	p.wg.Wait()
+	p.subscriptions.Range(func(key, value any) bool {
+		p.subscriptions.Delete(key)
+		return true
+	})
+	close(p.errChan)
+}
+
 func (m *machine) Current() int {
 	return len(m.current)
 }
@@ -197,15 +206,6 @@ func (m *machine) Wait() error {
 	default:
 		return nil
 	}
-}
-
-func (p *machine) Close() {
-	p.wg.Wait()
-	p.subscriptions.Range(func(key, value any) bool {
-		p.subscriptions.Delete(key)
-		return true
-	})
-	close(p.errChan)
 }
 
 func (p *machine) setupSubscription(channel, subId string) (chan Message, func()) {
