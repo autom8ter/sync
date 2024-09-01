@@ -2,6 +2,9 @@
 .vscode/
 
 vendor/
+
+go.work
+
 tmp
 *.prof
 cover.out
