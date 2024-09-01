@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/autom8ter/machine/v4"
+	"github.com/skovtunenko/machine"
 )
 
 func ExampleNew() {

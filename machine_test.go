@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/autom8ter/machine/v4"
+	"github.com/skovtunenko/machine"
 )
 
 func Test(t *testing.T) {
